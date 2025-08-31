@@ -1,0 +1,32 @@
+// backend/src/index.ts
+import express from "express";
+import dotenv from "dotenv";
+import bodyParser from "body-parser";
+import webhookRouter from "./controllers/webhook.controller";
+import { firestore } from "./config/firebase";
+
+dotenv.config();
+
+const app = express();
+app.use(bodyParser.json({ limit: "5mb" }));
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// Health route
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    uptime: process.uptime(),
+    firestore: firestore ? "connected" : "not-configured"
+  });
+});
+
+// Webhook endpoint (WhatsApp)
+app.use("/webhook", webhookRouter);
+
+// basic index
+app.get("/", (req, res) => res.send("AI Career Agent Backend - Node/TS"));
+
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => {
+  console.log(`Backend running on port ${PORT}`);
+});
