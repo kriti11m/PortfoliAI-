@@ -1,11 +1,11 @@
 // backend/src/index.ts
-import express from "express";
 import dotenv from "dotenv";
+dotenv.config();
+
+import express from "express";
 import bodyParser from "body-parser";
 import webhookRouter from "./controllers/webhook.controller";
 import { firestore } from "./config/firebase";
-
-dotenv.config();
 
 const app = express();
 app.use(bodyParser.json({ limit: "5mb" }));
