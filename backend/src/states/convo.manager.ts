@@ -3,6 +3,8 @@ import { ConvoService } from "../services/convo.service";
 import { TwilioService } from "../services/twilio.service";
 import { UserState } from "../types/states.types";
 import { firestore } from "../config/firebase";
+import { fetchGitHubRepos } from "../services/githubService";
+import { generatePortfolio } from "../services/portfolioService";
 
 /**
  * ConversationManager: single entrypoint handleIncomingMessage
@@ -104,15 +106,18 @@ export class ConversationManager {
           await TwilioService.sendMessage(from, "OK — send the project as: <Title> - <short description>. I'll save each one. Send 'done' when finished.");
           return;
         } else if (low.includes("generate") || low.includes("build")) {
-          // Move to building state (in real system enqueue a job)
+          // Move to building state
           userState.step = "building";
           await ConvoService.setUserState(from, userState);
 
-          // Create a build doc placeholder
-          if (typeof (global as any).__buildCounter === "undefined") (global as any).__buildCounter = 1;
-          const buildId = `build_${Date.now()}`;
+          await TwilioService.sendMessage(from, "🔧 Generating your portfolio... This may take a moment.");
 
           try {
+            // Generate portfolio
+            const { htmlUrl, pdfUrl } = await generatePortfolio(from);
+            
+            // Update build status
+            const buildId = `build_${Date.now()}`;
             if (firestore) {
               await firestore
                 .collection("builds")
@@ -120,15 +125,35 @@ export class ConversationManager {
                 .set({
                   buildId,
                   userId: from,
-                  status: "queued",
+                  status: "completed",
+                  htmlUrl,
+                  pdfUrl,
                   createdAt: new Date().toISOString(),
+                  completedAt: new Date().toISOString(),
                 });
             }
-          } catch (err) {
-            console.warn("Could not write build doc (dev environment).", err);
-          }
 
-          await TwilioService.sendMessage(from, "✅ Building your portfolio now. I will message you when it's ready (you will receive the site link + PDF).");
+            userState.step = "completed";
+            await ConvoService.setUserState(from, userState);
+
+            await TwilioService.sendMessage(
+              from, 
+              `🎉 Your portfolio is ready!\n\n` +
+              `📄 Website: ${htmlUrl}\n` +
+              `📑 PDF: ${pdfUrl}\n\n` +
+              `Type 'profile' to view your data or 'reset' to start over.`
+            );
+            
+          } catch (error) {
+            console.error("Portfolio generation error:", error);
+            userState.step = "collect_projects";
+            await ConvoService.setUserState(from, userState);
+            
+            await TwilioService.sendMessage(
+              from, 
+              "❌ Sorry, there was an error generating your portfolio. Please try again or type 'reset' to start over."
+            );
+          }
           return;
         } else {
           return TwilioService.sendMessage(
@@ -143,14 +168,49 @@ export class ConversationManager {
         if (!username) {
           return TwilioService.sendMessage(from, "Please send a valid GitHub username.");
         }
-        // Save username to draft and return to collect_projects
-        await ConvoService.upsertDraft(from, { githubUsername: username });
-        userState.data = userState.data || {};
-        userState.data.githubUsername = username;
-        userState.step = "collect_projects";
-        await ConvoService.setUserState(from, userState);
-        // In next step we will implement GitHub fetch; for now tell user how to proceed
-        return TwilioService.sendMessage(from, `Thanks — I saved GitHub username: ${username}. When you're ready, send 'list repos' to see your public repos or 'generate' to build with the current data.`);
+
+        try {
+          // Fetch GitHub repos
+          await TwilioService.sendMessage(from, "🔍 Fetching your GitHub repositories...");
+          
+          const repos = await fetchGitHubRepos(username);
+          
+          if (repos.length === 0) {
+            await TwilioService.sendMessage(from, "No public repositories found. You can type 'manual' to add projects manually or 'generate' to build with current data.");
+          } else {
+            // Save repos to draft
+            const projects = repos.map(repo => ({
+              title: repo.name,
+              description: repo.description || "No description provided",
+              url: repo.html_url,
+              language: repo.language,
+              stars: repo.stargazers_count
+            }));
+            
+            await ConvoService.upsertDraft(from, { 
+              githubUsername: username,
+              projects: projects
+            });
+
+            await TwilioService.sendMessage(
+              from, 
+              `✅ Successfully fetched ${repos.length} repositories from GitHub!\n\n` +
+              `• ${repos.slice(0, 3).map(r => r.name).join('\n• ')}` +
+              `${repos.length > 3 ? `\n... and ${repos.length - 3} more` : ''}\n\n` +
+              `Type 'generate' to build your portfolio now or 'manual' to add more projects.`
+            );
+          }
+          
+          userState.data = userState.data || {};
+          userState.data.githubUsername = username;
+          userState.step = "collect_projects";
+          await ConvoService.setUserState(from, userState);
+          
+        } catch (error) {
+          console.error("GitHub fetch error:", error);
+          await TwilioService.sendMessage(from, "❌ Error fetching GitHub repos. Please check the username and try again.");
+        }
+        return;
       }
 
       if (step === "adding_project") {

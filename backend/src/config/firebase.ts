@@ -2,7 +2,7 @@
 import admin from "firebase-admin";
 
 function initFirebase() {
-  if (admin.apps.length) return admin.firestore();
+  if (admin.apps.length) return { firestore: admin.firestore(), storage: admin.storage() };
 
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
@@ -10,7 +10,7 @@ function initFirebase() {
 
   if (!projectId || !clientEmail || !privateKey) {
     console.warn("Firestore environment variables missing - skipping initialization.");
-    return null;
+    return { firestore: null, storage: null };
   }
 
   // Private key may have literal \n that need replacing.
@@ -21,12 +21,15 @@ function initFirebase() {
       projectId,
       clientEmail,
       privateKey
-    } as admin.ServiceAccount)
+    } as admin.ServiceAccount),
+    storageBucket: `${projectId}.appspot.com`
   });
 
   const db = admin.firestore();
   db.settings({ ignoreUndefinedProperties: true });
-  return db;
+  return { firestore: db, storage: admin.storage() };
 }
 
-export const firestore = initFirebase();
+const { firestore, storage } = initFirebase();
+
+export { firestore, storage };
