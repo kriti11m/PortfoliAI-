@@ -26,7 +26,7 @@ app.use("/webhook", webhookRouter);
 // basic index
 app.get("/", (req, res) => res.send("AI Career Agent Backend - Node/TS"));
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
+const PORT = Number(process.env.PORT) || 8080;
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Backend running on port ${PORT}`);
 });

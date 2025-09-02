@@ -40,3 +40,10 @@ coverage/
 # Cache directories
 .npm/
 .eslintcache
+
+# ngrok files
+ngrok
+ngrok.exe
+ngrok-*.tgz
+ngrok-*.zip
+ngrok.zip

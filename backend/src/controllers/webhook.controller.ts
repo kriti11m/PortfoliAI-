@@ -1,40 +1,48 @@
 import express, { Request, Response } from "express";
 import { firestore } from "../config/firebase";
+import { ConversationManager } from "../states/convo.manager";
+import { TwilioService } from "../services/twilio.service";
 
 const router = express.Router();
 
-/**
- * POST /webhook/whatsapp
- * Twilio WhatsApp Webhook handler.
- *
- * Twilio sends data as x-www-form-urlencoded by default, so make sure
- * you added: app.use(express.urlencoded({ extended: true })); in index.ts
- */
+// GET route for webhook verification (required by Twilio)
+router.get("/whatsapp", (req: Request, res: Response) => {
+  console.log("Webhook verification request received");
+  res.status(200).send("Webhook endpoint is working!");
+});
+
 router.post("/whatsapp", async (req: Request, res: Response) => {
   try {
-    const from = req.body.From;   // "whatsapp:+919876543210"
-    const text = req.body.Body;   // Incoming message text
+    const from = req.body.From; // e.g. "whatsapp:+9198xxxxxx"
+    const body = req.body.Body?.trim(); // User's message
+    const messageId = req.body.MessageSid;
 
-    console.log(`Received text from ${from}: ${text}`);
+    console.log(`Incoming message from ${from}: ${body}`);
 
-    // Save raw message to Firestore
-    if (firestore) {
+    // 1. Save the incoming message in Firestore
+    if (firestore && messageId) {
       await firestore
-          .collection("conversations")
-          .doc(from)
-          .collection("messages")
-          .add({
-            from,
-            text,
-            timestamp: new Date(),
-          });
+        .collection("conversations")
+        .doc(from)
+        .collection("messages")
+        .doc(messageId)
+        .set({
+          from,
+          body,
+          direction: "inbound",
+          timestamp: new Date(),
+        });
     }
 
-    // Respond to Twilio (must return 200 quickly)
-    return res.status(200).send("Message received");
-  } catch (err) {
-    console.error("Webhook error:", err);
-    return res.sendStatus(500);
+    // 2. Pass the message to Conversation Manager
+    await ConversationManager.handleIncomingMessage(from, body);
+
+    // 3. Send quick ACK to Twilio
+    res.status(200).send("Message processed");
+
+  } catch (error) {
+    console.error("Error in WhatsApp webhook:", error);
+    res.status(500).send("Error processing message");
   }
 });
 
