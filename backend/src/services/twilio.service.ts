@@ -1,20 +1,50 @@
+
 import twilio from "twilio";
 
-const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const fromNumber = process.env.TWILIO_WHATSAPP_NUMBER;
+
+if (!accountSid || !authToken) {
+  console.warn("TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set in env.");
+}
+
+const client = twilio(accountSid || "", authToken || "");
 
 export class TwilioService {
   static async sendMessage(to: string, message: string) {
+    if (!fromNumber) {
+      console.warn("TWILIO_WHATSAPP_NUMBER not configured - cannot send message");
+      return null;
+    }
     try {
-      const result = await client.messages.create({
-        from: process.env.TWILIO_WHATSAPP_NUMBER, // e.g., "whatsapp:+14155238886"
-        to: to,
+      const res = await client.messages.create({
+        from: fromNumber,
+        to,
         body: message,
       });
-      console.log(`✅ Message sent to ${to}: ${message}`);
-      return result;
-    } catch (error) {
-      console.error("❌ Error sending message:", error);
-      throw error;
+      console.log(`Twilio: sent message to ${to} sid=${res.sid}`);
+      return res;
+    } catch (err) {
+      console.error("TwilioService.sendMessage error:", err);
+      throw err;
+    }
+  }
+
+  // optional helper for sending media in future
+  static async sendMediaMessage(to: string, body: string, mediaUrl: string[]) {
+    if (!fromNumber) throw new Error("TWILIO_WHATSAPP_NUMBER not configured");
+    try {
+      const res = await client.messages.create({
+        from: fromNumber,
+        to,
+        body,
+        mediaUrl,
+      });
+      return res;
+    } catch (err) {
+      console.error("TwilioService.sendMediaMessage error:", err);
+      throw err;
     }
   }
 }

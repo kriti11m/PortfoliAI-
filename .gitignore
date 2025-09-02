@@ -47,3 +47,4 @@ ngrok.exe
 ngrok-*.tgz
 ngrok-*.zip
 ngrok.zip
+start-ngrok.sh

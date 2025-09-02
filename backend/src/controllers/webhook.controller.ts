@@ -1,48 +1,50 @@
+// backend/src/controllers/webhook.controller.ts
 import express, { Request, Response } from "express";
 import { firestore } from "../config/firebase";
 import { ConversationManager } from "../states/convo.manager";
-import { TwilioService } from "../services/twilio.service";
 
 const router = express.Router();
 
-// GET route for webhook verification (required by Twilio)
+// GET route (health/verification quick check)
 router.get("/whatsapp", (req: Request, res: Response) => {
-  console.log("Webhook verification request received");
-  res.status(200).send("Webhook endpoint is working!");
+  console.log("GET /webhook/whatsapp verification check");
+  res.status(200).send("Webhook endpoint is working");
 });
 
 router.post("/whatsapp", async (req: Request, res: Response) => {
   try {
-    const from = req.body.From; // e.g. "whatsapp:+9198xxxxxx"
-    const body = req.body.Body?.trim(); // User's message
-    const messageId = req.body.MessageSid;
+    const from = req.body.From as string; // "whatsapp:+919..."
+    const body = (req.body.Body || req.body.Body) as string;
+    const messageId = req.body.MessageSid as string | undefined;
 
-    console.log(`Incoming message from ${from}: ${body}`);
+    console.log("Webhook POST /whatsapp:", { from, body, messageId });
 
-    // 1. Save the incoming message in Firestore
-    if (firestore && messageId) {
-      await firestore
-        .collection("conversations")
-        .doc(from)
-        .collection("messages")
-        .doc(messageId)
-        .set({
+    // Persist incoming message quickly (best-effort). ConvoService will also save.
+    if (firestore && from) {
+      try {
+        const msgDoc = firestore.collection("conversations").doc(from).collection("messages");
+        const id = messageId || msgDoc.doc().id;
+        await msgDoc.doc(id).set({
           from,
           body,
           direction: "inbound",
-          timestamp: new Date(),
+          timestamp: new Date().toISOString(),
+          raw: req.body,
         });
+      } catch (e) {
+        console.warn("Failed to persist webhook message (non-fatal):", e);
+      }
     }
 
-    // 2. Pass the message to Conversation Manager
+    // Handle the message in converation manager (don't await long processing for Twilio ack)
+    // but we will await here because we want deterministic message replies via Twilio before sending 200.
     await ConversationManager.handleIncomingMessage(from, body);
 
-    // 3. Send quick ACK to Twilio
-    res.status(200).send("Message processed");
-
-  } catch (error) {
-    console.error("Error in WhatsApp webhook:", error);
-    res.status(500).send("Error processing message");
+    // Quick ACK to Twilio
+    return res.status(200).send("Message processed");
+  } catch (err) {
+    console.error("Error in /webhook/whatsapp:", err);
+    return res.status(500).send("Webhook error");
   }
 });
 
