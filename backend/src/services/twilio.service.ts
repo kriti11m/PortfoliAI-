@@ -1,4 +1,3 @@
-
 import twilio from "twilio";
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -25,7 +24,11 @@ export class TwilioService {
       });
       console.log(`Twilio: sent message to ${to} sid=${res.sid}`);
       return res;
-    } catch (err) {
+    } catch (err: any) {
+      if (err.code === 63038) {
+        console.warn("Daily message limit exceeded. Please upgrade your Twilio account or wait 24 hours.");
+        return null; // Don't crash the app
+      }
       console.error("TwilioService.sendMessage error:", err);
       throw err;
     }
@@ -42,7 +45,11 @@ export class TwilioService {
         mediaUrl,
       });
       return res;
-    } catch (err) {
+    } catch (err: any) {
+      if (err.code === 63038) {
+        console.warn("Daily message limit exceeded for media message.");
+        return null;
+      }
       console.error("TwilioService.sendMediaMessage error:", err);
       throw err;
     }
