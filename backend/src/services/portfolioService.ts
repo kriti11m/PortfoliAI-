@@ -1,47 +1,50 @@
 // backend/src/services/portfolioService.ts
-import { firestore, storage } from "../config/firebase";
+import { firestore } from "../config/firebase";
 import { generateHTML } from "../utils/htmlGenerator";
 import { generatePDF } from "../utils/pdfGenerator";
 import { v4 as uuid } from "uuid";
+import { getStorage } from "firebase-admin/storage";
 
 export async function generatePortfolio(userId: string) {
-  // Get draft data instead of user collection
-  const draftDoc = await firestore?.collection("drafts").doc(userId).get();
-  if (!draftDoc?.exists) throw new Error("User draft not found");
+  // Ensure Firestore is initialized
+  if (!firestore) {
+    throw new Error("Firestore is not initialized");
+  }
 
-  const data = draftDoc.data();
-  console.log("Portfolio data:", data);
-  
+  // Get user data
+  const userDoc = await firestore.collection("profiles").doc(userId).collection("draft").doc("profile").get();
+  if (!userDoc.exists) throw new Error("User not found");
+
+  const data = userDoc.data();
+
   // Generate HTML
   const html = generateHTML(data);
 
-  // Generate PDF
+  // Generate PDF buffer
   const pdfBuffer = await generatePDF(html);
 
-  if (!storage) {
-    throw new Error("Firebase Storage not initialized");
-  }
-
-  // Upload HTML & PDF to Firebase Storage
+  // Firebase Storage bucket
+  const bucket = getStorage().bucket();
   const folder = `portfolios/${userId}-${uuid()}`;
-  const htmlFile = storage.bucket().file(`${folder}/index.html`);
-  const pdfFile = storage.bucket().file(`${folder}/portfolio.pdf`);
 
-  await htmlFile.save(html, { 
-    metadata: { contentType: "text/html" },
-    public: true
+  // Save HTML
+  const htmlFile = bucket.file(`${folder}/index.html`);
+  await htmlFile.save(html, { contentType: "text/html" });
+
+  // Save PDF
+  const pdfFile = bucket.file(`${folder}/portfolio.pdf`);
+  await pdfFile.save(pdfBuffer, { contentType: "application/pdf" });
+
+  // Generate signed URLs (valid for 7 days)
+  const [htmlUrl] = await htmlFile.getSignedUrl({
+    action: "read",
+    expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
   });
-  await pdfFile.save(pdfBuffer, { 
-    metadata: { contentType: "application/pdf" },
-    public: true
+
+  const [pdfUrl] = await pdfFile.getSignedUrl({
+    action: "read",
+    expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
   });
-
-  // Make files public and get URLs
-  await htmlFile.makePublic();
-  await pdfFile.makePublic();
-
-  const htmlUrl = `https://storage.googleapis.com/${htmlFile.bucket.name}/${htmlFile.name}`;
-  const pdfUrl = `https://storage.googleapis.com/${pdfFile.bucket.name}/${pdfFile.name}`;
 
   return { htmlUrl, pdfUrl };
 }

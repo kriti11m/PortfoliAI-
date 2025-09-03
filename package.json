@@ -1,5 +1,10 @@
 {
   "dependencies": {
-    "@octokit/rest": "^21.1.1"
+    "@octokit/rest": "^21.1.1",
+    "puppeteer": "^24.18.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/uuid": "^10.0.0"
   }
 }
