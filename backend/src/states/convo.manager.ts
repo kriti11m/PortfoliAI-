@@ -182,7 +182,7 @@ export class ConversationManager {
             const projects = repos.map(repo => ({
               title: repo.name,
               description: repo.description || "No description provided",
-              url: repo.html_url,
+              url: repo.url,
               language: repo.language,
               stars: repo.stargazers_count
             }));
@@ -258,7 +258,7 @@ export class ConversationManager {
     } catch (err) {
       console.error("ConversationManager.handleIncomingMessage error:", err);
       try {
-        await TwilioService.sendMessage(from, "⚠️ Oops — something went wrong on my side. Please try again or type 'reset' to restart.");
+        await TwilioService.sendMessage(from, "Oops — something went wrong on my side. Please try again or type 'reset' to restart.");
       } catch (e) {
         // ignore
       }

@@ -22,7 +22,18 @@ async function getUserData(userId: string) {
   }
 
   try {
-    // Try exact userId first
+    // Try to get from drafts collection first
+    console.log(`📋 Querying Firestore collection 'drafts' with doc ID: ${userId}`);
+    const draftDoc = await firestore.collection("drafts").doc(userId).get();
+
+    if (draftDoc.exists) {
+      console.log(`✅ Draft found with ID: ${userId}`);
+      const draftData = draftDoc.data();
+      console.log(`📄 Draft data:`, draftData);
+      return draftData;
+    }
+
+    // Fallback: try exact userId in users collection
     console.log(`📋 Querying Firestore collection 'users' with doc ID: ${userId}`);
     const userDoc = await firestore.collection("users").doc(userId).get();
 
